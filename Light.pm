@@ -30,6 +30,11 @@ sub load {
 	my $response = $ua->get("$endpoint/$key/lights/".$self->{id});
 	if ($response->is_success) {
 		my $object = $json->decode($response->decoded_content);
+		if ($object->{error} =~ /^HASH/) {
+			$self->{_error} = "Error: ".$object->[0]->{error}->{description};
+			return undef;
+		}
+		$self->{_name} = $object->{name};
 		$self->{_swupdate} = $object->{swupdate};
 		$self->{_uniqueid} = $object->{uniqueid};
 		$self->{_state} = $object->{state};
@@ -43,6 +48,25 @@ sub load {
 	else {
 		$self->{_error} = "Error loading info: ". $response->status_line."\n";
 	}
+}
+
+sub hash {
+	my $self = shift;
+	my %hash = (
+		name		=> $self->{_name},
+		uniqueid	=> $self->{_uniqueid},
+		reachable	=> $self->reachable,
+		brightness	=> $self->{_state}->{bri},
+		saturation	=> $self->{_state}->{sat},
+		colormode	=> $self->{_state}->{colormode}
+	);
+	if ($self->{_state}->{on} =~ /true/) {
+		$hash{on} = 1;
+	}
+	else {
+		$hash{on} = 0;
+	}
+	return %hash;
 }
 
 sub swupdate {
@@ -66,16 +90,54 @@ sub state {
 	return $self->{_state};
 }
 
-sub on {
+sub switch {
 	my $self = shift;
+	my $state = shift;
 
-	my $body = '{"on": true}';
-	my $response = $ua->put("$endpoint/$key/lights/".$self->{id}."/state",Content => $body);
-	if ($response->is_success) {
-		print $response->decoded_content;
+	my $body;
+	if ($state =~ /^on$/i) {
+		$body = '{"on": true}';
+	}
+	elsif ($state =~ /^off$/i) {
+		$body = '{"on": false}';
 	}
 	else {
-		die $response->status_line;
+		$self->{_error} = "Invalid state";
+		return 0;
+	}
+	my $response = $ua->put("$endpoint/$key/lights/".$self->{id}."/state",Content => $body);
+	if ($response->is_success) {
+		return 1;
+	}
+	else {
+		$self->{_error} = $response->status_line;
+		return 0;
+	}
+}
+
+sub color {
+	my $self = shift;
+	my $color = shift;
+
+	my $body;
+	$body = '{"xy":[0.675,0.322]}';
+	my $response = $ua->put("$endpoint/$key/lights/".$self->{id}."/state",Content => $body);
+	if ($response->is_success) {
+		return 1;
+	}
+	else {
+		$self->{_error} = $response->status_line;
+		return 0;
+	}
+}
+
+sub on {
+	my $self = shift;
+	if ($self->{_state}->{on} =~ /true/) {
+		return 1;
+	}
+	else {
+		return 0;
 	}
 }
 
@@ -87,15 +149,7 @@ sub reachable {
 	return 0;
 }
 
-sub off {
+sub error {
 	my $self = shift;
-
-	my $body = '{"on": false}';
-	my $response = $ua->put("$endpoint/$key/lights/".$self->{id}."/state",Content => $body);
-	if ($response->is_success) {
-		print $response->decoded_content;
-	}
-	else {
-		die $response->status_line;
-	}
+	return $self->{_error};
 }

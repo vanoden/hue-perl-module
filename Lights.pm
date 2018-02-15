@@ -34,7 +34,10 @@ sub find {
 		foreach my $id (sort keys %{$object}) {
 			my $light = Hue::Light->new($endpoint,$key,$id);
 			$light->load();
-			if ($parameters->{name} && $parameters->{name} != $light->name) {
+			if ($parameters->{name} && $parameters->{name} ne $light->name) {
+				next;
+			}
+			if ($parameters->{uniqueid} && $parameters->{uniqueid} ne $light->uniqueid) {
 				next;
 			}
 			push(@lights,$light);
@@ -44,4 +47,9 @@ sub find {
 	else {
 		$self->{_error} = "Error loading info: ". $response->status_line."\n";
 	}
+}
+
+sub error {
+	my $self = shift;
+	return $self->{_error};
 }
